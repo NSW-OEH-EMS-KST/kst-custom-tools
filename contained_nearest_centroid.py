@@ -7,7 +7,7 @@ class ContainedNearestCentroidTool(object):
     def __init__(self):
         """Define the tool (tool name is the name of the class)."""
 
-        self.label = "Contained Nearest centroid"
+        self.label = "Contained Nearest Centroid"
         self.description = "Finds the point contained within a polygon that is nearest to the polygon's centroid"
         self.canRunInBackground = False
 
