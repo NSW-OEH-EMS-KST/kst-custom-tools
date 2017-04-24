@@ -7,8 +7,8 @@ class SumCostDistancesTool(object):
 
     def __init__(self):
 
-        self.label = "Sum of Cost Distances by Unique Field Values"
-        self.description = "Sums cost distances calculated on unique input field values"
+        self.label = "Sum Cost Distances"
+        self.description = "Sums cost distances calculated on unique input feature field values"
         self.canRunInBackground = False
 
         return
@@ -92,7 +92,7 @@ class SumCostDistancesTool(object):
         parameter_summary = ", ".join(["{}: {}".format(k, v) for k, v in parameter_dictionary.iteritems()])
         messages.AddMessage("Parameter summary: {}".format(parameter_summary))
 
-        features, features_fieldname, cost_raster, max_cost_distance, out_raster_cellsize, out_ws, save_costs = parameter_dictionary.values()
+        features, features_fieldname, cost_raster, max_cost_distance, out_raster_cellsize, out_ws, delete_costs = parameter_dictionary.values()
 
         try:
             arcpy.SelectLayerByAttribute_management(features, "CLEAR_SELECTION")
@@ -152,5 +152,10 @@ class SumCostDistancesTool(object):
 
         try:
             arcpy.Compact_management(out_ws)
+        except:
+            pass
+
+        try:
+            arcpy.SelectLayerByAttribute_management(features, "CLEAR_SELECTION")
         except:
             pass
