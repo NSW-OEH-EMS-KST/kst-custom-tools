@@ -64,8 +64,8 @@ class SumCostDistancesTool(object):
         param5.defaultEnvironmentName = "workspace"
 
         param6 = arcpy.Parameter(
-            displayName="Save Individual Cost Rasters",
-            name="save_costs",
+            displayName="Delete Individual Cost Rasters",
+            name="delete_costs",
             datatype="GPBoolean",
             parameterType="Required",
             direction="Input")
@@ -146,7 +146,7 @@ class SumCostDistancesTool(object):
 
         sum_raster.save(sum_raster_name)
 
-        if not save_costs == "false":
+        if delete_costs == "true":
             for r in cost_raster_names.values():
                 arcpy.Delete_management(r)
 
