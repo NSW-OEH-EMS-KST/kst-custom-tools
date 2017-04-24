@@ -134,11 +134,11 @@ class SumCostDistancesTool(object):
 
             raise ValueError("No cost rasters to sum")
 
-        rasters_to_sum = cost_raster_names.values()
+        cost_rasters = cost_raster_names.values()
 
-        sum_raster = arcpy.Raster(rasters_to_sum[0])
-        for raster in rasters_to_sum[1:]:
-            sum_raster += raster
+        sum_raster = arcpy.Raster(cost_rasters[0])
+        for cost_raster in cost_rasters[1:]:
+            sum_raster += arcpy.Raster(cost_raster)
 
         sum_raster_name = "cost_sum"
         sum_raster_name = arcpy.ValidateTableName(sum_raster_name, out_ws)

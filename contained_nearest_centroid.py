@@ -5,7 +5,6 @@ import os
 class ContainedNearestCentroidTool(object):
 
     def __init__(self):
-        """Define the tool (tool name is the name of the class)."""
 
         self.label = "Contained Nearest Centroid"
         self.description = "Finds the point contained within a polygon that is nearest to the polygon's centroid"
@@ -14,7 +13,6 @@ class ContainedNearestCentroidTool(object):
         return
 
     def getParameterInfo(self):
-        """Define parameter definitions"""
 
         param0 = arcpy.Parameter(
             displayName="Polygon Features",
@@ -46,25 +44,18 @@ class ContainedNearestCentroidTool(object):
         return [param0, param1, param2]
 
     def isLicensed(self):
-        """Set whether tool is licensed to execute."""
 
         return True
 
     def updateParameters(self, parameters):
-        """Modify the values and properties of parameters before internal
-        validation is performed.  This method is called whenever a parameter
-        has been changed."""
 
         return
 
     def updateMessages(self, parameters):
-        """Modify the messages created by internal validation for each tool
-        parameter.  This method is called after internal validation."""
 
         return
 
     def execute(self, parameters, messages):
-        """The source code of the tool."""
 
         polygons = parameters[0].valueAsText
         points = parameters[1].valueAsText
@@ -124,18 +115,16 @@ class ContainedNearestCentroidTool(object):
         if results:
 
             result_ds_name = arcpy.ValidateTableName("nearest_to_centroid_in_containing_polygon", out_ws)
+            result_ds_name = arcpy.CreateUniqueName(result_ds_name, out_ws)
             result_ds_name = os.path.join(out_ws, result_ds_name)
             where = '"{}" IN {}'.format(point_id_field, tuple(results.keys()))
 
+            arcpy.SelectLayerByAttribute_management(points, "NEW_SELECTION", where)
+
             try:
-
-                arcpy.SelectLayerByAttribute_management(points, "NEW_SELECTION", where)
-                if arcpy.Exists(result_ds_name):
-                    arcpy.Delete_management(result_ds_name)
                 arcpy.CopyFeatures_management(points, result_ds_name)
-
             except Exception as e:
-                messages.AddError("Error creating result dataset '{}' : {}".format(result_ds_name, e))
+                messages.AddErrorMessage("Error creating result dataset '{}' : {}".format(result_ds_name, e))
 
             messages.AddMessage("Result dataset '{}' created".format(result_ds_name))
 
