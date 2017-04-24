@@ -90,44 +90,48 @@ class SumCostDistancesTool(object):
 
         parameter_dictionary = OrderedDict([(p.DisplayName, p.valueAsText) for p in parameters])
         parameter_summary = ", ".join(["{}: {}".format(k, v) for k, v in parameter_dictionary.iteritems()])
-        messages.AddMessage("Parameter summary: {}".format(parameter_summary))
+        messages.addMessage("Parameter summary: {}".format(parameter_summary))
 
         features, features_fieldname, cost_raster, max_cost_distance, out_raster_cellsize, out_ws, delete_costs = parameter_dictionary.values()
 
         try:
             arcpy.SelectLayerByAttribute_management(features, "CLEAR_SELECTION")
-            messages.AddMessage("Selection in layer {} cleared".format(features))
+            messages.addMessage("Selection in layer '{}' cleared".format(features))
         except:
             pass
 
-        unique_orders = sorted({row[0] for row in arcpy.da.SearchCursor(features, features_fieldname) if row[0]})
-        unique_orders_count = len(unique_orders)
-        messages.AddMessage("The feature dataset field {} has {} unique values: {}".format(features_fieldname, unique_orders_count, unique_orders))
+        unique_values = sorted({row[0] for row in arcpy.da.SearchCursor(features, features_fieldname) if row[0]})
+        unique_values_count = len(unique_values)
+        messages.addMessage("The feature dataset field '{}' has {} unique values: {}".format(features_fieldname, unique_values_count, unique_values))
 
-        cost_raster_names = OrderedDict([(order, "cost_{}".format(order)) for order in unique_orders])
-        cost_raster_names = {k: arcpy.ValidateTableName(v, out_ws) for k, v in cost_raster_names.iteritems()}
-        cost_raster_names = {k: os.path.join(out_ws, v) for k, v in cost_raster_names.iteritems()}
+        cost_raster_names = OrderedDict([(value, make_output_name("cost_{}".format(value), out_ws)) for value in unique_values])
 
-        messages.AddMessage("cost rasters to be generated: {}".format(cost_raster_names.values()))
+        messages.addMessage("Cost rasters to be generated: {}".format(cost_raster_names.values()))
 
         temp_layer = "temp_layer"
 
-        for order in unique_orders:
-            messages.AddMessage("Processing field value = {}".format(order))
+        for value in unique_values:
+            messages.addMessage("Processing field value = {}".format(value))
 
             if arcpy.Exists(temp_layer):
                 arcpy.Delete_management(temp_layer)
 
-            where = '"{}" = {}'.format(features_fieldname, order)
+            where = '"{}" = {}'.format(features_fieldname, value)
             arcpy.SelectLayerByAttribute_management(features, "NEW_SELECTION", where)
             try:
                 cost = arcpy.sa.CostDistance(features, cost_raster, max_cost_distance)
-                out_name = cost_raster_names[order]
-                cost.save(out_name)
-                messages.AddMessage("Created cost raster {}".format(out_name))
+                messages.addMessage("\tCreated cost raster")
             except:
-                messages.AddMessage("Could not create cost raster for field value = {}".format(order))
-                cost_raster_names.pop(order)
+                messages.addWarningMessage("\tCould not create cost raster")
+                cost_raster_names.pop(value)
+                continue
+            try:
+                out_name = cost_raster_names[value]
+                cost.save(out_name)
+                messages.addMessage("\tSaved cost raster '{}'".format(out_name))
+            except:
+                messages.addWarningMessage("\tCould not create cost raster for field value = {}".format(value))
+                cost_raster_names.pop(value)
                 continue
 
         if not len(cost_raster_names):
@@ -136,22 +140,21 @@ class SumCostDistancesTool(object):
 
         cost_rasters = cost_raster_names.values()
 
-        sum_raster = arcpy.Raster(cost_rasters[0])
+        sum_raster = nulls_to_zero(cost_rasters[0])
         for cost_raster in cost_rasters[1:]:
-            sum_raster += arcpy.Raster(cost_raster)
+            sum_raster += nulls_to_zero(cost_raster)
 
-        sum_raster_name = "cost_sum"
-        sum_raster_name = arcpy.ValidateTableName(sum_raster_name, out_ws)
-        sum_raster_name = os.path.join(out_ws, sum_raster_name)
-
-        sum_raster.save(sum_raster_name)
+        sum_raster.save(make_output_name("cost_sum", out_ws))
 
         if delete_costs == "true":
+            messages.addMessage("Deleting individual cost rasters...")
             for r in cost_raster_names.values():
                 arcpy.Delete_management(r)
+                messages.addMessage("\tDeleted cost raster '{}'".format(r))
 
         try:
             arcpy.Compact_management(out_ws)
+            messages.addMessage("Output workspace '{}' compacted".format(out_ws))
         except:
             pass
 
@@ -159,3 +162,16 @@ class SumCostDistancesTool(object):
             arcpy.SelectLayerByAttribute_management(features, "CLEAR_SELECTION")
         except:
             pass
+
+
+def make_output_name(like_name, out_ws):
+
+    like_name = arcpy.ValidateTableName(like_name, out_ws)
+    like_name = arcpy.CreateUniqueName(like_name, out_ws)
+
+    return os.path.join(out_ws, like_name)
+
+
+def nulls_to_zero(in_raster):
+
+    return arcpy.sa.Con(arcpy.sa.IsNull(in_raster), 0, in_raster)

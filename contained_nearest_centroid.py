@@ -80,7 +80,7 @@ class ContainedNearestCentroidTool(object):
             where = '"{}" = {}'.format(polygon_id_field, polygon_id)
             try:
                 arcpy.MakeFeatureLayer_management(polygons, tmp_poly_lyr, where)
-                messages.AddMessage("Temp layer for feature ID = {} created".format(polygon_id))
+                messages.addMessage("Temp layer for feature ID = {} created".format(polygon_id))
             except:
                 messages.AddWarning("Could not created temp layer for feature ID = {}".format(polygon_id))
                 continue
@@ -88,7 +88,7 @@ class ContainedNearestCentroidTool(object):
             arcpy.SelectLayerByLocation_management(points, "WITHIN", tmp_poly_lyr)
 
             count = int(arcpy.GetCount_management(points).getOutput(0))
-            messages.AddMessage("{} points within polygon".format(count))
+            messages.addMessage("{} points within polygon".format(count))
             if count == 0:
                 continue
 
@@ -98,35 +98,39 @@ class ContainedNearestCentroidTool(object):
             poly_centroid_pt.X, poly_centroid_pt.Y = poly_centroid
 
             dists = [(row[1], row[0].distanceTo(poly_centroid_pt)) for row in point_search_cursor]
-            messages.AddMessage("distances are {}".format(dists))
+            messages.addMessage("distances are {}".format(dists))
 
             min_dist = min([dist for oid, dist in dists])
             minimums = [(oid, dist) for oid, dist in dists if dist == min_dist]
-            messages.AddMessage("minimum is {}".format(minimums))
+            messages.addMessage("minimum is {}".format(minimums))
 
             if len(minimums) > 1:
-                messages.AddMessage("multiple minimum distances, taking first found as result".format(minimums))
+                messages.addMessage("multiple minimum distances, taking first found as result".format(minimums))
 
             minimums = minimums[0]
-            messages.AddMessage("Result is PointID = {} Distance = {}".format(*minimums))
+            messages.addMessage("Result is PointID = {} Distance = {}".format(*minimums))
 
             results[minimums[0]] = minimums[1]
 
         if results:
-
-            result_ds_name = arcpy.ValidateTableName("nearest_to_centroid_in_containing_polygon", out_ws)
-            result_ds_name = arcpy.CreateUniqueName(result_ds_name, out_ws)
-            result_ds_name = os.path.join(out_ws, result_ds_name)
             where = '"{}" IN {}'.format(point_id_field, tuple(results.keys()))
 
             arcpy.SelectLayerByAttribute_management(points, "NEW_SELECTION", where)
 
+            result_ds_name = "nearest_to_centroid_in_containing_polygon"
+            if arcpy.Describe(out_ws).workspaceType == "FileSystem":
+                result_ds_name += ".shp"
+            result_ds_name = arcpy.ValidateTableName(result_ds_name, out_ws)
+            result_ds_name = arcpy.CreateUniqueName(result_ds_name, out_ws)
+            result_ds_name = os.path.join(out_ws, result_ds_name)
+
             try:
                 arcpy.CopyFeatures_management(points, result_ds_name)
             except Exception as e:
-                messages.AddErrorMessage("Error creating result dataset '{}' : {}".format(result_ds_name, e))
+                messages.addErrorMessage("Error creating result dataset '{}' : {}".format(result_ds_name, e))
+                messages.addMessage("*** Export the selection in layer '{}' to save the results".format(points))
 
-            messages.AddMessage("Result dataset '{}' created".format(result_ds_name))
+            messages.addMessage("Result dataset '{}' created".format(result_ds_name))
 
         return
 
