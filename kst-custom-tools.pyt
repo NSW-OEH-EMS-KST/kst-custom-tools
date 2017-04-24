@@ -1,6 +1,7 @@
 import arcpy
 from contained_nearest_centroid import ContainedNearestCentroidTool
 from sum_cost_distances import SumCostDistancesTool
+from run_maxent import RunMaxentTool
 
 
 class Toolbox(object):
@@ -9,7 +10,7 @@ class Toolbox(object):
 
         self.label = "KST Custom Tools"
         self.alias = "kst_custom_toolbox"
-        self.tools = [ContainedNearestCentroidTool, SumCostDistancesTool]
+        self.tools = [ContainedNearestCentroidTool, SumCostDistancesTool, RunMaxentTool]
 
         return
 
