@@ -96,117 +96,122 @@
 
 import arcpy
 import os
+import sys
 from collections import OrderedDict
 
 
-class RunMaxentTool(object):
+class MaxentModellingTool(object):
 
     def __init__(self):
 
-        self.label = "Run Maxent"
-        self.description = "Runs Maxent"
+        self.label = "Maxent Modelling"
+        self.description = "Run 'Maxent' species distribution modelling tool"
         self.canRunInBackground = False
 
         return
 
     def getParameterInfo(self):
 
-        param0 = arcpy.Parameter(
-            displayName="MaxEnt JAR File",
-            name="jar_file",
+        runnable = arcpy.Parameter(
+            displayName="Maxent Runnable",
+            name="run_file",
             datatype="DEFile",
             parameterType="Required",
             direction="Input")
 
-        param0.filter.list = ["*.jar"]
+        runnable.filter.list = ["bat", "jar"]
+        runnable.value = locate_maxent_runnable()
 
-        param1 = arcpy.Parameter(
-            displayName="?? CSV File",
-            name="csv_file",
+        samples = arcpy.Parameter(
+            displayName="Samples File(s)",
+            name="csv_files",
             datatype="DEFile",
             parameterType="Required",
-            direction="Input")
+            direction="Input",
+            multiValue=True)
 
-        param1.filter.list = ["*.csv"]
+        samples.filter.list = ["*.csv"]
 
-        param2 = arcpy.Parameter(
-            displayName="?? Climate Data Folder",
+        enviro = arcpy.Parameter(
+            displayName="Environmental Layers Directory",
             name="climate_folder",
             datatype="DEFolder",
             parameterType="Required",
             direction="Input")
 
-        param3 = arcpy.Parameter(
+        out_dir = arcpy.Parameter(
+            displayName="Output Directory",
+            name="out_dir",
+            datatype="DEFolder",
+            parameterType="Required",
+            direction="Input")
+
+        model_type = arcpy.Parameter(
             displayName="Output Model Type",
             name="out_model_type",
             datatype="GPString",
             parameterType="Required",
             direction="Input")
 
-        param3.filter.list = ["Logistic", "Cumulative", "Raw"]
+        model_type.filter.list = ["Logistic", "Cumulative", "Raw"]
+        model_type.value = model_type.filter.list[0]
 
-        param4 = arcpy.Parameter(
+        out_format = arcpy.Parameter(
             displayName="Output File Format",
             name="out_file_format",
             datatype="GPString",
             parameterType="Required",
             direction="Input")
 
-        param4.filter.list = ["asc", "mxe", "grd", "bil"]
+        out_format.filter.list = ["asc", "mxe", "grd", "bil"]
+        out_format.value = out_format.filter.list[0]
 
-        param5 = arcpy.Parameter(
-            displayName="Output Workspace",
-            name="out_folder",
-            datatype="DEWorkspace",
-            parameterType="Required",
-            direction="Input")
-
-        param6 = arcpy.Parameter(
-            displayName="Create prediction curves",
-            name="create_prediction_curves",
-            datatype="GPBoolean",
-            parameterType="Required",
-            direction="Input")
-
-        param6.value = False
-
-        param7 = arcpy.Parameter(
+        create_response = arcpy.Parameter(
             displayName="Create response curves",
             name="create_response_curves",
             datatype="GPBoolean",
             parameterType="Required",
             direction="Input")
 
-        param7.value = True
+        create_response.value = False
 
-        param8 = arcpy.Parameter(
-            displayName="Do jacknife to measure variable importance",
+        make_pictures = arcpy.Parameter(
+            displayName="Make pictures of predictions",
+            name="make_prediction_pictures",
+            datatype="GPBoolean",
+            parameterType="Required",
+            direction="Input")
+
+        make_pictures.value = True
+
+        do_jacknife = arcpy.Parameter(
+            displayName="Do jackknife to measure variable importance",
             name="do_jacknife",
             datatype="GPBoolean",
             parameterType="Required",
             direction="Input")
 
-        param8.value = True
+        do_jacknife.value = False
 
-        param9 = arcpy.Parameter(
+        skip_existing = arcpy.Parameter(
             displayName="Skip if output exists",
             name="skip_if_exists",
             datatype="GPBoolean",
             parameterType="Required",
             direction="Input")
 
-        param9.value = False
+        skip_existing.value = False
 
-        param10 = arcpy.Parameter(
+        suppress_warnings = arcpy.Parameter(
             displayName="Suppress warnings",
             name="suppress_warnings",
             datatype="GPBoolean",
             parameterType="Required",
             direction="Input")
 
-        param10.value = False
+        suppress_warnings.value = False
 
-        return [param0, param1, param2, param3, param4, param5, param6, param8, param9, param10]
+        return [runnable, samples, enviro, out_dir, model_type, out_format, create_response, do_jacknife, skip_existing, suppress_warnings]
 
     def isLicensed(self):
 
@@ -225,6 +230,20 @@ class RunMaxentTool(object):
         # parameter_dictionary = OrderedDict([(p.DisplayName, p.valueAsText) for p in parameters])
         # parameter_summary = ", ".join(["{}: {}".format(k, v) for k, v in parameter_dictionary.iteritems()])
         messages.addMessage("Not Implemented")
+
+
+def locate_maxent_runnable():
+    script_path = sys.path[0]
+    bat = os.path.join(script_path, "maxent", "maxent.bat")
+    jar = os.path.join(script_path, "maxent", "maxent.jar")
+    print bat, jar
+
+    if os.path.exists(bat):
+        return bat
+    elif os.path.exists(jar):
+        return jar
+
+    return "not found"
 
         # features, features_fieldname, cost_raster, max_cost_distance, out_raster_cellsize, out_ws, delete_costs = parameter_dictionary.values()
         #
