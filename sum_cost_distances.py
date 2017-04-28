@@ -1,4 +1,5 @@
 import arcpy
+import arcpy.mapping
 import os
 from collections import OrderedDict
 
@@ -21,8 +22,6 @@ class SumCostDistancesTool(object):
             datatype=["GPFeatureLayer", "GPRasterLayer"],
             parameterType="Required",
             direction="Input")
-
-        # param0.filter.list = ["Polyline"]
 
         param1 = arcpy.Parameter(
             displayName="Field of Interest",
@@ -93,6 +92,8 @@ class SumCostDistancesTool(object):
         messages.addMessage("Parameter summary: {}".format(parameter_summary))
 
         features, features_fieldname, cost_raster, max_cost_distance, out_raster_cellsize, out_ws, delete_costs = parameter_dictionary.values()
+
+        features = arcpy.mapping.Layer(features)
 
         try:
             arcpy.SelectLayerByAttribute_management(features, "CLEAR_SELECTION")
