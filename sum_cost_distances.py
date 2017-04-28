@@ -18,11 +18,11 @@ class SumCostDistancesTool(object):
         param0 = arcpy.Parameter(
             displayName="Features",
             name="in_features",
-            datatype="GPFeatureLayer",
+            datatype=["GPFeatureLayer", "GPRasterLayer"],
             parameterType="Required",
             direction="Input")
 
-        param0.filter.list = ["Polyline"]
+        # param0.filter.list = ["Polyline"]
 
         param1 = arcpy.Parameter(
             displayName="Field of Interest",

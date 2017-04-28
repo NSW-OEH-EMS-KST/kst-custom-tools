@@ -39,9 +39,6 @@
 # supressWarnings = arcpy.GetParameterAsText(10)
 
 
-
-
-
 # # get name of species from input file
 # species = os.path.basename(csvFile)
 # species = species[1:-4]
@@ -56,49 +53,13 @@
 # # or write a separate maxent results file for each species
 # "perspeciesresults=true"
 #
-# # create the maxent command
-# myCommand = "java -mx512m -jar \"" + maxent + "\" -e \"" + climatedataFolder + "\""
-# myCommand += " -s \"" + csvFile + "\" -o \"" + newOutputFolder + "\""
-# myCommand += " outputformat=" + optOutputFormat.lower() + " outputfiletype=" + optOutputFileType.lower()
-#
-# # add options
-# if optResponseCurves == 'true':
-#     myCommand += " -P"
-# if optPredictionPictures == 'true':
-#     myCommand += " pictures=true"
-# else:
-#     myCommand += " pictures=false"
-# if optJackknife  == 'true':
-#     myCommand += " -J"
-# if optSkipifExists  == 'true':
-#     myCommand += " -S"
-# if supressWarnings  == 'true':
-#     myCommand += " warnings=false"
-# else:
-#     myCommand += " warnings=true"
-#
-# # finish the command
-# myCommand += " -a"
-#
-# # add a message
-# arcpy.AddMessage("Starting Maxent")
-# arcpy.AddMessage(myCommand)
-#
-# # execute the command
-# result = os.system(myCommand)
-#
-# if (result == 0):
-#     arcpy.AddMessage(" ")
-#     arcpy.AddMessage("Finished")
-# else:
-#     arcpy.AddMessage(" ")
-#     arcpy.AddError("Error Running Maxent")
-
 import arcpy
+import arcpy.mapping
 import os
 import sys
 import csv
-from collections import OrderedDict
+import subprocess
+import collections
 
 
 class MaxentModellingTool(object):
@@ -108,157 +69,169 @@ class MaxentModellingTool(object):
         self.label = "Maxent Modelling"
         self.description = "Run 'Maxent' species distribution modelling tool"
         self.canRunInBackground = False
+        self._parameters = None
 
         return
 
+    # from maxent.jar...
+
+    # public String[] getParameters()
+    # {
+    #     return new String[]
+    #     {"responsecurves", "pictures", "jackknife", "outputformat", "outputfiletype", "outputdirectory", "projectionlayers", "samplesfile", "environmentallayers",
+    #      "randomseed", "logscale", "warnings", "tooltips", "askoverwrite", "skipifexists", "removeduplicates", "writeclampgrid", "writemess", "randomtestpoints",
+    #      "betamultiplier", "maximumbackground", "biasfile", "testsamplesfile", "replicates", "replicatetype", "perspeciesresults", "writebackgroundpredictions",
+    #      "biasisbayesianprior", "responsecurvesexponent", "linear", "quadratic", "product", "threshold", "hinge", "polyhedral", "addsamplestobackground",
+    #      "addallsamplestobackground", "autorun", "dosqrtcat", "writeplotdata", "fadebyclamping", "extrapolate", "visible", "autofeature", "givemaxaucestimate",
+    #      "doclamp", "outputgrids", "plots", "appendtoresultsfile", "parallelupdatefrequency", "maximumiterations", "convergencethreshold", "adjustsampleradius",
+    #      "threads", "lq2lqptthreshold", "l2lqthreshold", "hingethreshold", "beta_threshold", "beta_categorical", "beta_lqp", "beta_hinge", "biastype", "logfile",
+    #      "scientificpattern", "cache", "cachefeatures", "defaultprevalence", "applythresholdrule", "togglelayertype", "togglespeciesselected",
+    #      "togglelayerselected", "verbose", "allowpartialdata", "prefixes", "printversion", "nodata", "nceas", "factorbiasout", "priordistribution",
+    #      "debiasaverages", "minclamping", "manualreplicates"};
+    # }
+
     def getParameterInfo(self):
 
-        runnable = arcpy.Parameter(
+        jar = arcpy.Parameter(
             displayName="Maxent Runnable",
-            name="run_file",
+            name="jar",
             datatype="DEFile",
             parameterType="Required",
             direction="Input")
 
-        runnable.filter.list = ["bat", "jar"]
-        runnable.value = locate_maxent_runnable()
+        jar.filter.list = ["bat", "jar"]
+        jar.value = locate_maxent_runnable()
 
-        samples_csv = arcpy.Parameter(
-            displayName="Samples File",
-            name="samples_csv",
-            datatype="GPTableView",
+        mem = arcpy.Parameter(
+            displayName="Memory Commitment",
+            name="mem",
+            datatype="GPLong",
             parameterType="Required",
             direction="Input")
 
-        # samples_csv.filter.list = ["csv"]
+        mem.filter.type = "Range"
+        mem.filter.list = [512, 1024]
+        mem.value = 512
 
-        species = arcpy.Parameter(
-            displayName="Species",
-            name="species",
-            datatype="GPString",
+        samplesfile = arcpy.Parameter(
+            displayName="Samples File",
+            name="samplesfile",
+            datatype="DEFile",
             parameterType="Required",
-            direction="Input",
-            multiValue=True)
+            direction="Input")
 
-        enviro_layers = arcpy.Parameter(
-            displayName="Environmental Layers",
-            name="enviro_layers",
-            datatype=["GPRasterLayer", "DERasterDataset"],
+        samplesfile.filter.list = ["csv"]
+
+        environmentallayers = arcpy.Parameter(
+            displayName="Environmental Layers Directory",
+            name="environmentallayers",
+            datatype=["DEFolder"],
             parameterType="Required",
-            direction="Input",
-            multiValue=True)
-        #
-        # enviro.filter.list = ["csv", "asc"]
+            direction="Input")
 
-        enviro_layers_type = arcpy.Parameter(
-            displayName="Environmental Layers Types",
-            name="enviro_layers_type",
-            datatype="GPValueTable",
-            parameterType="Required",
-            direction="Input",
-            multiValue=True)
-
-        enviro_layers_type.columns = [["GPString", "Layer"], ["GPString", "Type"]]
-        enviro_layers_type.filters[1].type = "ValueList"
-        enviro_layers_type.filters[1].list = ["Continuous", "Categorical"]
-
-        out_dir = arcpy.Parameter(
+        outputdirectory = arcpy.Parameter(
             displayName="Output Directory",
-            name="out_dir",
+            name="outputdirectory",
             datatype="DEFolder",
             parameterType="Required",
             direction="Input")
 
-        model_type = arcpy.Parameter(
-            displayName="Output Model Type",
-            name="model_type",
+        autorun = arcpy.Parameter(
+            displayName="Run Automatically",
+            name="autorun",
+            datatype="GPBoolean",
+            parameterType="Optional",
+            direction="Input")
+
+        autorun.value = True
+
+        outputformat = arcpy.Parameter(
+            displayName="Output Format",
+            name="outputformat",
             datatype="GPString",
             parameterType="Required",
             direction="Input",
             category="Format")
 
-        model_type.filter.list = ["Logistic", "Cumulative", "Raw"]
-        model_type.value = model_type.filter.list[0]
+        outputformat.filter.list = ["cloglog", "logistic", "cumulative", "raw"]
+        outputformat.value = outputformat.filter.list[0]
 
-        out_format = arcpy.Parameter(
-            displayName="Output File Format",
-            name="out_format",
+        outputfiletype = arcpy.Parameter(
+            displayName="Output File Type",
+            name="outputfiletype",
             datatype="GPString",
             parameterType="Required",
             direction="Input",
             category="Format")
 
-        out_format.filter.list = ["asc", "mxe", "grd", "bil"]
-        out_format.value = out_format.filter.list[0]
+        outputfiletype.filter.list = ["asc", "mxe", "grd", "bil"]
+        outputfiletype.value = outputfiletype.filter.list[0]
 
         projection_layers = arcpy.Parameter(
-            displayName="Projection Layers",
+            displayName="Projection Layers Directory",
             name="projection_layers",
-            datatype="GPString",
-            parameterType="Required",
+            datatype=["DEFile", "DEFolder"],
+            parameterType="Optional",
             direction="Input",
-            category="Format")
+            category="Main Options")
 
-        projection_layers.filter.list = ["asc", "mxe", "grd", "bil"]
-        projection_layers.value = out_format.filter.list[0]
-
-        create_response = arcpy.Parameter(
+        responsecurves = arcpy.Parameter(
             displayName="Create response curves",
-            name="create_response_curves",
+            name="responsecurves",
             datatype="GPBoolean",
-            parameterType="Required",
+            parameterType="Optional",
             direction="Input",
-            category="Options")
+            category="Main Options")
 
-        create_response.value = False
+        responsecurves.value = False
 
-        make_pictures = arcpy.Parameter(
+        pictures = arcpy.Parameter(
             displayName="Make pictures of predictions",
-            name="make_prediction_pictures",
+            name="pictures",
             datatype="GPBoolean",
-            parameterType="Required",
+            parameterType="Optional",
             direction="Input",
-            category="Options")
+            category="Main Options")
 
-        make_pictures.value = True
+        pictures.value = True
 
-        do_jacknife = arcpy.Parameter(
+        jacknife = arcpy.Parameter(
             displayName="Do jackknife to measure variable importance",
-            name="do_jacknife",
+            name="jacknife",
             datatype="GPBoolean",
-            parameterType="Required",
+            parameterType="Optional",
             direction="Input",
-            category="Options")
+            category="Main Options")
 
-        do_jacknife.value = False
+        jacknife.value = False
 
         skip_existing = arcpy.Parameter(
             displayName="Skip if output exists",
-            name="skip_if_exists",
+            name="skipifexists",
             datatype="GPBoolean",
-            parameterType="Required",
+            parameterType="Optional",
             direction="Input",
-            category="Options")
+            category="Main Options")
 
         skip_existing.value = False
 
-        suppress_warnings = arcpy.Parameter(
+        warnings = arcpy.Parameter(
             displayName="Suppress warnings",
-            name="suppress_warnings",
+            name="warnings",
             datatype="GPBoolean",
-            parameterType="Required",
+            parameterType="Optional",
             direction="Input",
-            category="Options")
+            category="Main Options")
 
-        suppress_warnings.value = False
+        warnings.value = False
 
         auto_features = arcpy.Parameter(
             displayName="Auto Features",
             name="auto_features",
             datatype="GPBoolean",
-            parameterType="Required",
+            parameterType="Optional",
             direction="Input",
-            category="Options")
+            category="Main Options")
 
         auto_features.value = True
 
@@ -266,56 +239,71 @@ class MaxentModellingTool(object):
             displayName="Linear Features",
             name="linear_features",
             datatype="GPBoolean",
-            parameterType="Required",
+            parameterType="Optional",
             direction="Input",
-            category="Options")
+            category="Main Options")
 
         linear_features.value = True
+        linear_features.enabled = False
 
         quadratic_features = arcpy.Parameter(
             displayName="Quadratic Features",
             name="quadratic_features",
             datatype="GPBoolean",
-            parameterType="Required",
+            parameterType="Optional",
             direction="Input",
-            category="Options")
+            category="Main Options")
 
         quadratic_features.value = True
+        quadratic_features.enabled = False
 
         product_features = arcpy.Parameter(
             displayName="Product Features",
             name="product_features",
             datatype="GPBoolean",
-            parameterType="Required",
+            parameterType="Optional",
             direction="Input",
-            category="Options")
+            category="Main Options")
 
         product_features.value = True
+        product_features.enabled = False
 
         threshold_features = arcpy.Parameter(
             displayName="Threshold Features",
             name="threshold_features",
             datatype="GPBoolean",
-            parameterType="Required",
+            parameterType="Optional",
             direction="Input",
-            category="Options")
+            category="Main Options")
 
         threshold_features.value = False
+        threshold_features.enabled = False
 
         hinge_features = arcpy.Parameter(
             displayName="Hinge Features",
             name="hinge_features",
             datatype="GPBoolean",
-            parameterType="Required",
+            parameterType="Optional",
             direction="Input",
-            category="Options")
+            category="Main Options")
+
+        hinge_features.value = False
+        hinge_features.enabled = False
+
+        verbose = arcpy.Parameter(
+            displayName="Verbose Output",
+            name="verbose",
+            datatype="GPBoolean",
+            parameterType="Optional",
+            direction="Input",
+            category="Main Options")
 
         hinge_features.value = False
 
-        return [runnable, samples_csv, species, enviro_layers, enviro_layers_type, out_dir,
-                model_type, out_format, projection_layers,
-                create_response, make_pictures, do_jacknife, skip_existing, suppress_warnings,
-                auto_features, linear_features, quadratic_features, product_features, threshold_features, hinge_features]
+        return [jar, mem, samplesfile, environmentallayers, outputdirectory, autorun,
+                outputformat, outputfiletype, projection_layers,
+                responsecurves, pictures, jacknife, skip_existing, warnings,
+                auto_features, linear_features, quadratic_features, product_features, threshold_features, hinge_features, verbose]
 
     def isLicensed(self):
 
@@ -323,34 +311,32 @@ class MaxentModellingTool(object):
 
     def updateParameters(self, parameters):
 
-        def get_by_name(parameter_name):
-            for param in parameters:
-                if param.name == parameter_name:
-                    return param
-            raise ValueError("Parameter '{}' not found".format(p))
+        # csv_param = get_parameter_by_name(parameters, "samplesfile")
 
-        def set_by_name(parameter_name, value):
-            param = get_by_name(parameter_name)
-            param.value = value
-            return
+        # if csv_param.altered:
+        #     ds = None
+        #     desc = arcpy.Describe(csv_param.valueAsText)
+        #     try:
+        #         ds = desc.dataSource
+        #     except AttributeError:
+        #         try:
+        #             ds = desc.catalogPath
+        #         except AttributeError:
+        #             pass
+        #     if ds:
+        #         with open(ds, 'r') as f:
+        #             rows = [row for row in csv.reader(f, delimiter=',')]
+        #             unique_species = ";".join(list({row[0] for row in rows[1:]}))
+        #
+        #     species_param = get_parameter_by_name(parameters, "species")
+        #     species_param.values = unique_species
 
-        csv_param = get_by_name("samples_csv")
-
-        if csv_param.altered:
-
-            with open(csv_param.valueAsText, 'r') as f:
-                rows = [row for row in csv.reader(f, delimiter=',')]
-                unique_species = ";".join(list({row[0] for row in rows[1:]}))
-
-            species_param = get_by_name("species")
-            species_param.values = unique_species
-
-        enviro_layers_param = get_by_name("enviro_layers")
+        # enviro_layers_param = get_parameter_by_name(parameters, "environmentallayers")
         # enviro_param = get_by_name("enviro")
         #
         # if enviro_param.altered:
         #
-        #     enviro_layers_param = get_by_name("enviro_layers")
+        #     enviro_layers_param = get_by_name("environmentallayers")
         #
         #     enviro_values = enviro_param.valueAsText
         #     if not enviro_values:
@@ -391,18 +377,19 @@ class MaxentModellingTool(object):
             #
             # species_param.values = unique_species
 
-        auto_features = get_by_name("auto_features")
+        auto_features = get_parameter_by_name(parameters, "auto_features")
 
         if auto_features.altered:
 
-            bool = [False, True][auto_features == "true"]
+            bool = [False, True][auto_features.valueAsText == "true"]
 
-            set_by_name("linear_features", bool)
-            set_by_name("linear_features", bool)
-            set_by_name("quadratic_features", bool)
-            set_by_name("product_features", bool)
-            set_by_name("threshold_features", bool)
-            set_by_name("hinge_features", bool)
+            enable_parameter_by_name(parameters, "linear_features", bool)
+            enable_parameter_by_name(parameters, "quadratic_features", bool)
+            enable_parameter_by_name(parameters, "product_features", bool)
+            enable_parameter_by_name(parameters, "threshold_features", bool)
+            enable_parameter_by_name(parameters, "hinge_features", bool)
+
+        self.make_parameter_dict(parameters)
 
         return
 
@@ -410,28 +397,186 @@ class MaxentModellingTool(object):
 
         return
 
+    def make_parameter_dict(self, parameters):
+
+        pd = collections.OrderedDict()
+        for p in parameters:
+            name = p.name
+            if p.dataType == "Boolean":
+                pd[name] = [False, True][p.valueAsText == "true"]
+            elif p.dataType == "Double":
+                pd[name] = float(p.valueAsText) if p.valueAsText else None
+            elif p.dataType == "Long":
+                pd[name] = int(float(p.valueAsText)) if p.valueAsText else None
+            else:
+                pd[name] = p.valueAsText
+
+        # try:
+        #     desc = arcpy.Describe(pd["samplesfile"])
+        #     try:
+        #         ds = desc.dataSource
+        #     except AttributeError:
+        #         try:
+        #             ds = desc.catalogPath
+        #         except AttributeError:
+        #             ds = None
+        # except:
+        #     ds = None
+        #
+        # pd["samplesfile"] = ds
+
+        self._parameters = pd
+
+        pd["summary"] = ", ".join(["{}: {}".format(k, v) for k, v in self._parameters.iteritems()])
+
+        self._parameters = pd
+
+        return
+
     def execute(self, parameters, messages):
 
-        parameter_dictionary = OrderedDict([(p.DisplayName, p.valueAsText) for p in parameters])
-        parameter_summary = ", ".join(["{}: {}".format(k, v) for k, v in parameter_dictionary.iteritems()])
-        messages.addMessage("Parameter Summary:\n" + parameter_summary)
-        messages.addMessage("Nothing else implemented")
+        self.make_parameter_dict(parameters)
+
+        messages.addMessage("")
+        messages.addMessage("Parameter Summary: {}".format(self._parameters["summary"]))
+
+        cmdargs = build_commands(self._parameters)
+        cmdstr = " ".join(cmdargs)
+
+        messages.addMessage("")
+        messages.addMessage("Starting Maxent with command line:")
+        messages.addMessage(cmdstr)
+
+        process = subprocess.Popen(cmdstr, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)  # can't get working with shell=False and cmdargs = [...]
+        stdout, stderr = process.communicate()
+        retcode = process.returncode
+        retstr = "Return Code {}".format(retcode)
+
+        messages.addMessage("")
+        if not retcode:
+             messages.addMessage(retstr + " Success")
+        else:
+            messages.addMessage(retstr + " Failure")
+
+        messages.addMessage("")
+        messages.addMessage("stdout:")
+        messages.addMessage(stdout)
+        messages.addMessage("")
+        messages.addMessage("stderr:")
+        messages.addMessage(stderr)
+
+        out_dir = self._parameters["outputdirectory"]
+
+        log = os.path.join(out_dir, "maxent.log")
+        messages.addMessage("")
+        if not os.path.exists(log):
+            messages.addMessage("{} not found".format(log))
+        else:
+            messages.addMessage("Log contents:")
+            for line in list(open(log)):
+                line = line.strip()
+                if line:
+                    messages.addMessage(line)
+
+        out_fmt = self._parameters["outputfiletype"]
+        out_files = [fn for fn in os.listdir(out_dir) if fn.endswith(out_fmt)]
+        out_files = [os.path.join(out_dir, fn) for fn in out_files]
+
+        messages.addMessage("")
+        messages.addMessage("Result files generated:")
+        for fn in out_files:
+            messages.addMessage(fn)
+
+        messages.addMessage("")
+        messages.addMessage("Adding output to map")
+        for fn in out_files:
+            mxd = arcpy.mapping.MapDocument("CURRENT")
+            df = arcpy.mapping.ListDataFrames(mxd, "*")[0]
+            newlayer = arcpy.mapping.Layer(fn)
+            try:
+                arcpy.mapping.AddLayer(df, newlayer, "BOTTOM")
+                messages.addMessage("{} added".format(fn))
+            except Exception as e:
+                messages.addMessage("Could not add {} added".format(e))
+
+        arcpy.RefreshActiveView()
+        arcpy.RefreshTOC()
+
+        return
 
 
 def locate_maxent_runnable():
 
     script_path = sys.path[0]
-    bat = os.path.join(script_path, "maxent", "maxent.bat")
     jar = os.path.join(script_path, "maxent", "maxent.jar")
 
-    if os.path.exists(bat):
-        return bat
-    elif os.path.exists(jar):
+    if os.path.exists(jar):
         return jar
 
-    return "not found"
+    return "not found at {}".format(jar)
 
-        # features, features_fieldname, cost_raster, max_cost_distance, out_raster_cellsize, out_ws, delete_costs = parameter_dictionary.values()
+
+def get_parameter_by_name(parameters, parameter_name):
+
+    for param in parameters:
+        if param.name == parameter_name:
+            return param
+
+    raise ValueError("Parameter '{}' not found".format(p))
+
+
+def set_parameter_by_name(parameters, parameter_name, value):
+
+    param = get_parameter_by_name(parameters, parameter_name)
+    param.value = value
+
+    return
+
+
+def enable_parameter_by_name(parameters, parameter_name, value):
+
+    param = get_parameter_by_name(parameters, parameter_name)
+    param.enabled = value
+
+    return
+
+
+def build_commands(pars):
+
+    cmd = 'java'
+
+    cmd += ' -mx{}m'.format(pars['mem'])
+
+    cmd += ' -jar "{}"'.format(pars['jar'])
+
+    cmd += ' samplesfile="{}"'.format(pars['samplesfile'])
+
+    cmd += ' environmentallayers="{}"'.format(pars['environmentallayers'])
+
+    cmd += ' outputdirectory="{}"'.format(pars['outputdirectory'])
+
+    cmd += ' outputformat={}'.format(pars['outputformat'])
+
+    cmd += ' outputfiletype={}'.format(pars['outputfiletype'])
+
+    cmd += ['', ' responsecurves'][pars['responsecurves']]
+
+    cmd += ['', ' pictures'][pars['pictures']]
+
+    cmd += ['', ' jackknife'][pars['jacknife']]
+
+    cmd += ['', ' skipifexists'][pars['skipifexists']]
+
+    cmd += ['', ' warnings'][pars['warnings']]
+
+    cmd += ['', ' autorun'][pars['autorun']]
+
+    cmd += ['', ' verbose'][pars['verbose']]
+
+    return cmd.split()
+
+
+# features, features_fieldname, cost_raster, max_cost_distance, out_raster_cellsize, out_ws, delete_costs = parameter_dictionary.values()
         #
         # try:
         #     arcpy.SelectLayerByAttribute_management(features, "CLEAR_SELECTION")
