@@ -91,19 +91,22 @@ class SumCostDistancesTool(object):
         parameter_summary = ", ".join(["{}: {}".format(k, v) for k, v in parameter_dictionary.iteritems()])
         messages.addMessage("Parameter summary: {}".format(parameter_summary))
 
-        features, features_fieldname, cost_raster, max_cost_distance, out_raster_cellsize, out_ws, delete_costs = parameter_dictionary.values()
+        in_layer, in_fieldname, cost_raster, max_cost_distance, out_raster_cellsize, out_ws, delete_costs = parameter_dictionary.values()
+        
+        in_fields = [f.name for f in arcpy.ListFields(in_layer)]
+        messages.addMessage("Fields in layer '{}'".format(in_fields))
 
-        features = arcpy.mapping.Layer(features)
+        in_layer = arcpy.mapping.Layer(in_layer)
 
         try:
-            arcpy.SelectLayerByAttribute_management(features, "CLEAR_SELECTION")
-            messages.addMessage("Selection in layer '{}' cleared".format(features))
+            arcpy.SelectLayerByAttribute_management(in_layer, "CLEAR_SELECTION")
+            messages.addMessage("Selection in layer '{}' cleared".format(in_layer))
         except:
             pass
 
-        unique_values = sorted({row[0] for row in arcpy.da.SearchCursor(features, features_fieldname) if row[0]})
+        unique_values = sorted({row[0] for row in arcpy.da.SearchCursor(in_layer, in_fieldname) if row[0]})
         unique_values_count = len(unique_values)
-        messages.addMessage("The feature dataset field '{}' has {} unique values: {}".format(features_fieldname, unique_values_count, unique_values))
+        messages.addMessage("The feature dataset field '{}' has {} unique values: {}".format(in_fieldname, unique_values_count, unique_values))
 
         cost_raster_names = OrderedDict([(value, make_output_name("cost_{}".format(value), out_ws)) for value in unique_values])
 
@@ -117,10 +120,10 @@ class SumCostDistancesTool(object):
             if arcpy.Exists(temp_layer):
                 arcpy.Delete_management(temp_layer)
 
-            where = '"{}" = {}'.format(features_fieldname, value)
-            arcpy.SelectLayerByAttribute_management(features, "NEW_SELECTION", where)
+            where = '"{}" = {}'.format(in_fieldname, value)
+            arcpy.SelectLayerByAttribute_management(in_layer, "NEW_SELECTION", where)
             try:
-                cost = arcpy.sa.CostDistance(features, cost_raster, max_cost_distance)
+                cost = arcpy.sa.CostDistance(in_layer, cost_raster, max_cost_distance)
                 messages.addMessage("\tCreated cost raster")
             except:
                 messages.addWarningMessage("\tCould not create cost raster")
@@ -160,7 +163,7 @@ class SumCostDistancesTool(object):
             pass
 
         try:
-            arcpy.SelectLayerByAttribute_management(features, "CLEAR_SELECTION")
+            arcpy.SelectLayerByAttribute_management(in_layer, "CLEAR_SELECTION")
         except:
             pass
 
