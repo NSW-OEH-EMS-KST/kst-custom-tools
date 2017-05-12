@@ -18,7 +18,7 @@ class SumCostDistancesTool(object):
     def getParameterInfo(self):
 
         param0 = arcpy.Parameter(
-            displayName="Features",
+            displayName="Input Layer",
             name="in_features",
             datatype=["GPFeatureLayer", "GPRasterLayer"],
             parameterType="Required",
