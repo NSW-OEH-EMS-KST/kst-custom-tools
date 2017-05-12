@@ -1,6 +1,7 @@
 import arcpy
 import arcpy.mapping
 import os
+import numpy
 from collections import OrderedDict
 
 
@@ -92,11 +93,16 @@ class SumCostDistancesTool(object):
         messages.addMessage("Parameter summary: {}".format(parameter_summary))
 
         in_layer, in_fieldname, cost_raster, max_cost_distance, out_raster_cellsize, out_ws, delete_costs = parameter_dictionary.values()
-        
+
         in_fields = [f.name for f in arcpy.ListFields(in_layer)]
-        messages.addMessage("Fields in layer '{}'".format(in_fields))
+        messages.addMessage("Fields in dataset '{}' are '{}'".format(in_layer, in_fields))
 
         in_layer = arcpy.mapping.Layer(in_layer)
+        in_layer_desc = arcpy.Describe(in_layer)
+        in_layer_path = in_layer_desc.catalogPath
+        in_layer_dtype = in_layer_desc.dataType
+
+        messages.addMessage("Input layer path, type = '{}', '{}".format(in_layer_path, in_layer_dtype))
 
         try:
             arcpy.SelectLayerByAttribute_management(in_layer, "CLEAR_SELECTION")
@@ -104,9 +110,25 @@ class SumCostDistancesTool(object):
         except:
             pass
 
-        unique_values = sorted({row[0] for row in arcpy.da.SearchCursor(in_layer, in_fieldname) if row[0]})
+        try:
+            arcpy.BuildRasterAttributeTable_management(in_layer)
+            messages.addMessage("Fresh attribute table built")
+        except:
+            pass
+
+        try:
+            data = arcpy.da.TableToNumPyArray(in_layer_path, in_fieldname)
+        except:
+            try:
+                data = arcpy.da.FeatureClassToNumPyArray(in_layer_path, in_fieldname)
+            except:
+                raise ValueError("Could not pull in Numpy array")
+
+        unique_values = numpy.unique(data[in_fieldname])
+
+        # unique_values = sorted({row[0] for row in arcpy.da.SearchCursor(in_layer, in_fieldname)})  # if row[0]})
         unique_values_count = len(unique_values)
-        messages.addMessage("The feature dataset field '{}' has {} unique values: {}".format(in_fieldname, unique_values_count, unique_values))
+        messages.addMessage("The input dataset field '{}' has {} unique values: {}".format(in_fieldname, unique_values_count, unique_values))
 
         cost_raster_names = OrderedDict([(value, make_output_name("cost_{}".format(value), out_ws)) for value in unique_values])
 
@@ -121,8 +143,8 @@ class SumCostDistancesTool(object):
                 arcpy.Delete_management(temp_layer)
 
             where = '"{}" = {}'.format(in_fieldname, value)
-            arcpy.SelectLayerByAttribute_management(in_layer, "NEW_SELECTION", where)
             try:
+                arcpy.SelectLayerByAttribute_management(in_layer, "NEW_SELECTION", where)
                 cost = arcpy.sa.CostDistance(in_layer, cost_raster, max_cost_distance)
                 messages.addMessage("\tCreated cost raster")
             except:
@@ -148,7 +170,15 @@ class SumCostDistancesTool(object):
         for cost_raster in cost_rasters[1:]:
             sum_raster += nulls_to_zero(cost_raster)
 
-        sum_raster.save(make_output_name("cost_sum", out_ws))
+        out_name = make_output_name("cost_sum", out_ws)
+        sum_raster.save(out_name)
+        messages.addMessage("\tSaved summed cost raster to '{}'".format(out_name))
+
+        try:
+            arcpy.mapping.AddLayer(arcpy.mapping.ListDataFrames(arcpy.mapping.MapDocument("CURRENT"))[0], arcpy.Layer(out_name))
+            messages.addMessage("'{}' added to map".format(out_name))
+        except:
+            messages.addMessage("Could not add '{}' to map".format(out_name))
 
         if delete_costs == "true":
             messages.addMessage("Deleting individual cost rasters...")
