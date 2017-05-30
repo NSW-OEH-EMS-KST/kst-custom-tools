@@ -1,5 +1,6 @@
 import arcpy
 import arcpy.mapping
+from arcpy import env
 import os
 from collections import OrderedDict
 
@@ -93,6 +94,9 @@ class SumCostDistancesTool(object):
 
         features, features_fieldname, cost_raster, max_cost_distance, out_raster_cellsize, out_ws, delete_costs = parameter_dictionary.values()
 
+        fields = [f.name for f in arcpy.ListFields(features)]
+        messages.addMessage("Fields available in dataset are {}".format(fields))
+
         features = arcpy.mapping.Layer(features)
 
         try:
@@ -100,8 +104,8 @@ class SumCostDistancesTool(object):
             messages.addMessage("Selection in layer '{}' cleared".format(features))
         except:
             pass
-
-        unique_values = sorted({row[0] for row in arcpy.da.SearchCursor(features, features_fieldname) if row[0]})
+#
+        unique_values = sorted({row[0] for row in arcpy.da.SearchCursor(features, features_fieldname)})  # if row[0]})
         unique_values_count = len(unique_values)
         messages.addMessage("The feature dataset field '{}' has {} unique values: {}".format(features_fieldname, unique_values_count, unique_values))
 
@@ -110,6 +114,7 @@ class SumCostDistancesTool(object):
         messages.addMessage("Cost rasters to be generated: {}".format(cost_raster_names.values()))
 
         temp_layer = "temp_layer"
+        arcpy.env.workspace = "in_memory"
 
         for value in unique_values:
             messages.addMessage("Processing field value = {}".format(value))
@@ -121,9 +126,19 @@ class SumCostDistancesTool(object):
             arcpy.SelectLayerByAttribute_management(features, "NEW_SELECTION", where)
             try:
                 cost = arcpy.sa.CostDistance(features, cost_raster, max_cost_distance)
+                arcpy .CalculateStatistics_management(cost)
+                # normalise
+                messages.addMessage("\tNormalising")
+                cost = (cost - cost.minimum)/(cost.maximum - cost.minimum)
+                # invert
+                messages.addMessage("\tInverting")
+                cost = arcpy.sa.Abs(cost - 1)
+                # scaling
+                messages.addMessage("\tScaling")
+                cost = cost * value  # test this
                 messages.addMessage("\tCreated cost raster")
-            except:
-                messages.addWarningMessage("\tCould not create cost raster")
+            except Exception as e:
+                messages.addWarningMessage("\tCould not create cost raster: {}".format(str(e)))
                 cost_raster_names.pop(value)
                 continue
             try:
