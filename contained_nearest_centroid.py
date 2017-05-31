@@ -24,24 +24,42 @@ class ContainedNearestCentroidTool(object):
         param0.filter.list = ["Polygon"]
 
         param1 = arcpy.Parameter(
+            displayName="Polygon Features ID Field",
+            name="in_polygons_id",
+            datatype="Field",
+            parameterType="Required",
+            direction="Input")
+
+        param1.parameterDependencies = ["in_polygons"]  # should be constant
+
+        param2 = arcpy.Parameter(
             displayName="Point Features",
             name="in_points",
             datatype="GPFeatureLayer",
             parameterType="Required",
             direction="Input")
 
-        param1.filter.list = ["Point"]
+        param2.filter.list = ["Point"]
 
-        param2 = arcpy.Parameter(
+        param3 = arcpy.Parameter(
+            displayName="Point Features ID Field",
+            name="in_points_id",
+            datatype="Field",
+            parameterType="Required",
+            direction="Input")
+
+        param3.parameterDependencies = ["in_points"]  # should be constant
+
+        param4 = arcpy.Parameter(
             displayName="Output Workspace",
             name="in_outws",
             datatype="DEWorkspace",
             parameterType="Required",
             direction="Input")
 
-        param2.defaultEnvironmentName = "workspace"
+        param4.defaultEnvironmentName = "workspace"
 
-        return [param0, param1, param2]
+        return [param0, param1, param2, param3, param4]
 
     def isLicensed(self):
 
@@ -58,11 +76,13 @@ class ContainedNearestCentroidTool(object):
     def execute(self, parameters, messages):
 
         polygons = parameters[0].valueAsText
-        points = parameters[1].valueAsText
-        out_ws = parameters[2].valueAsText
+        polygon_id_field = parameters[1].valueAsText
+        points = parameters[2].valueAsText
+        point_id_field = parameters[3].valueAsText
+        out_ws = parameters[4].valueAsText
 
-        polygon_id_field = get_well_known_id_field(polygons)
-        point_id_field = get_well_known_id_field(points)
+        # polygon_id_field = get_well_known_id_field(polygons)
+        # point_id_field = get_well_known_id_field(points)
 
         tmp_poly_lyr = "tmp_poly_lyr"
 
