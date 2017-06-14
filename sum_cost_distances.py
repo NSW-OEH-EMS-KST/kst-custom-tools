@@ -1,7 +1,7 @@
 import arcpy
 import arcpy.mapping
-from arcpy import env
 import os
+import numpy
 from collections import OrderedDict
 
 
@@ -18,7 +18,7 @@ class SumCostDistancesTool(object):
     def getParameterInfo(self):
 
         param0 = arcpy.Parameter(
-            displayName="Features",
+            displayName="Input Layer",
             name="in_features",
             datatype=["GPFeatureLayer", "GPRasterLayer"],
             parameterType="Required",
@@ -92,29 +92,49 @@ class SumCostDistancesTool(object):
         parameter_summary = ", ".join(["{}: {}".format(k, v) for k, v in parameter_dictionary.iteritems()])
         messages.addMessage("Parameter summary: {}".format(parameter_summary))
 
-        features, features_fieldname, cost_raster, max_cost_distance, out_raster_cellsize, out_ws, delete_costs = parameter_dictionary.values()
+        in_layer, in_fieldname, cost_raster, max_cost_distance, out_raster_cellsize, out_ws, delete_costs = parameter_dictionary.values()
 
-        fields = [f.name for f in arcpy.ListFields(features)]
-        messages.addMessage("Fields available in dataset are {}".format(fields))
+        in_fields = [f.name for f in arcpy.ListFields(in_layer)]
+        messages.addMessage("Fields in dataset '{}' are '{}'".format(in_layer, in_fields))
 
-        features = arcpy.mapping.Layer(features)
+        in_layer = arcpy.mapping.Layer(in_layer)
+        in_layer_desc = arcpy.Describe(in_layer)
+        in_layer_path = in_layer_desc.catalogPath
+        in_layer_dtype = in_layer_desc.dataType
+
+        messages.addMessage("Input layer path, type = '{}', '{}".format(in_layer_path, in_layer_dtype))
 
         try:
-            arcpy.SelectLayerByAttribute_management(features, "CLEAR_SELECTION")
-            messages.addMessage("Selection in layer '{}' cleared".format(features))
+            arcpy.SelectLayerByAttribute_management(in_layer, "CLEAR_SELECTION")
+            messages.addMessage("Selection in layer '{}' cleared".format(in_layer))
         except:
             pass
-#
-        unique_values = sorted({row[0] for row in arcpy.da.SearchCursor(features, features_fieldname)})  # if row[0]})
+
+        try:
+            arcpy.BuildRasterAttributeTable_management(in_layer)
+            messages.addMessage("Fresh attribute table built")
+        except:
+            pass
+
+        try:
+            data = arcpy.da.TableToNumPyArray(in_layer_path, in_fieldname)
+        except:
+            try:
+                data = arcpy.da.FeatureClassToNumPyArray(in_layer_path, in_fieldname)
+            except:
+                raise ValueError("Could not pull in Numpy array")
+
+        unique_values = numpy.unique(data[in_fieldname])
+
+        # unique_values = sorted({row[0] for row in arcpy.da.SearchCursor(in_layer, in_fieldname)})  # if row[0]})
         unique_values_count = len(unique_values)
-        messages.addMessage("The feature dataset field '{}' has {} unique values: {}".format(features_fieldname, unique_values_count, unique_values))
+        messages.addMessage("The input dataset field '{}' has {} unique values: {}".format(in_fieldname, unique_values_count, unique_values))
 
         cost_raster_names = OrderedDict([(value, make_output_name("cost_{}".format(value), out_ws)) for value in unique_values])
 
         messages.addMessage("Cost rasters to be generated: {}".format(cost_raster_names.values()))
 
         temp_layer = "temp_layer"
-        arcpy.env.workspace = "in_memory"
 
         for value in unique_values:
             messages.addMessage("Processing field value = {}".format(value))
@@ -122,23 +142,13 @@ class SumCostDistancesTool(object):
             if arcpy.Exists(temp_layer):
                 arcpy.Delete_management(temp_layer)
 
-            where = '"{}" = {}'.format(features_fieldname, value)
-            arcpy.SelectLayerByAttribute_management(features, "NEW_SELECTION", where)
+            where = '"{}" = {}'.format(in_fieldname, value)
             try:
-                cost = arcpy.sa.CostDistance(features, cost_raster, max_cost_distance)
-                arcpy .CalculateStatistics_management(cost)
-                # normalise
-                messages.addMessage("\tNormalising")
-                cost = (cost - cost.minimum)/(cost.maximum - cost.minimum)
-                # invert
-                messages.addMessage("\tInverting")
-                cost = arcpy.sa.Abs(cost - 1)
-                # scaling
-                messages.addMessage("\tScaling")
-                cost = cost * value  # test this
+                arcpy.SelectLayerByAttribute_management(in_layer, "NEW_SELECTION", where)
+                cost = arcpy.sa.CostDistance(in_layer, cost_raster, max_cost_distance)
                 messages.addMessage("\tCreated cost raster")
-            except Exception as e:
-                messages.addWarningMessage("\tCould not create cost raster: {}".format(str(e)))
+            except:
+                messages.addWarningMessage("\tCould not create cost raster")
                 cost_raster_names.pop(value)
                 continue
             try:
@@ -160,7 +170,15 @@ class SumCostDistancesTool(object):
         for cost_raster in cost_rasters[1:]:
             sum_raster += nulls_to_zero(cost_raster)
 
-        sum_raster.save(make_output_name("cost_sum", out_ws))
+        out_name = make_output_name("cost_sum", out_ws)
+        sum_raster.save(out_name)
+        messages.addMessage("\tSaved summed cost raster to '{}'".format(out_name))
+
+        try:
+            arcpy.mapping.AddLayer(arcpy.mapping.ListDataFrames(arcpy.mapping.MapDocument("CURRENT"))[0], arcpy.Layer(out_name))
+            messages.addMessage("'{}' added to map".format(out_name))
+        except:
+            messages.addMessage("Could not add '{}' to map".format(out_name))
 
         if delete_costs == "true":
             messages.addMessage("Deleting individual cost rasters...")
@@ -175,7 +193,7 @@ class SumCostDistancesTool(object):
             pass
 
         try:
-            arcpy.SelectLayerByAttribute_management(features, "CLEAR_SELECTION")
+            arcpy.SelectLayerByAttribute_management(in_layer, "CLEAR_SELECTION")
         except:
             pass
 

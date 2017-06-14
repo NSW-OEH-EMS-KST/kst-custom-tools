@@ -1,6 +1,6 @@
 import arcpy
 import os
-
+from datetime import datetime
 
 class ContainedNearestCentroidTool(object):
 
@@ -81,12 +81,11 @@ class ContainedNearestCentroidTool(object):
         point_id_field = parameters[3].valueAsText
         out_ws = parameters[4].valueAsText
 
-        # polygon_id_field = get_well_known_id_field(polygons)
-        # point_id_field = get_well_known_id_field(points)
-
         tmp_poly_lyr = "tmp_poly_lyr"
 
         poly_search_cursor = arcpy.da.UpdateCursor(polygons, ['SHAPE@XY', 'OID@'])
+        total_rows = len(poly_search_cursor)
+        row_num = 0
         results = {}
 
         for poly_row in poly_search_cursor:
@@ -94,13 +93,17 @@ class ContainedNearestCentroidTool(object):
             poly_centroid = poly_row[0]
             polygon_id = poly_row[1]
 
+            row_num += 1
+            messages.addMessage("{} > Processing feature {} of {} with {} = {}".format(datetime.now().strftime("%H:%M:%S%f")[:-3], row_num, total_rows, polygon_id_field, polygon_id))
+            # messages.addMessage("Processing feature ID = {}".format(polygon_id))
+
             if arcpy.Exists(tmp_poly_lyr):
                 arcpy.Delete_management(tmp_poly_lyr)
 
             where = '"{}" = {}'.format(polygon_id_field, polygon_id)
             try:
                 arcpy.MakeFeatureLayer_management(polygons, tmp_poly_lyr, where)
-                messages.addMessage("Temp layer for feature ID = {} created".format(polygon_id))
+                # messages.addMessage("Temp layer for feature ID = {} created".format(polygon_id))
             except:
                 messages.AddWarning("Could not created temp layer for feature ID = {}".format(polygon_id))
                 continue
@@ -108,7 +111,7 @@ class ContainedNearestCentroidTool(object):
             arcpy.SelectLayerByLocation_management(points, "WITHIN", tmp_poly_lyr)
 
             count = int(arcpy.GetCount_management(points).getOutput(0))
-            messages.addMessage("{} points within polygon".format(count))
+            # messages.addMessage("{} points within polygon".format(count))
             if count == 0:
                 continue
 
@@ -118,17 +121,17 @@ class ContainedNearestCentroidTool(object):
             poly_centroid_pt.X, poly_centroid_pt.Y = poly_centroid
 
             dists = [(row[1], row[0].distanceTo(poly_centroid_pt)) for row in point_search_cursor]
-            messages.addMessage("distances are {}".format(dists))
+            # messages.addMessage("distances are {}".format(dists))
 
             min_dist = min([dist for oid, dist in dists])
             minimums = [(oid, dist) for oid, dist in dists if dist == min_dist]
-            messages.addMessage("minimum is {}".format(minimums))
+            # messages.addMessage("minimum is {}".format(minimums))
 
-            if len(minimums) > 1:
-                messages.addMessage("multiple minimum distances, taking first found as result".format(minimums))
+            # if len(minimums) > 1:
+            #     messages.addMessage("multiple minimum distances, taking first found as result".format(minimums))
 
             minimums = minimums[0]
-            messages.addMessage("Result is PointID = {} Distance = {}".format(*minimums))
+            # messages.addMessage("Result is PointID = {} Distance = {}".format(*minimums))
 
             results[minimums[0]] = minimums[1]
 
@@ -146,25 +149,10 @@ class ContainedNearestCentroidTool(object):
 
             try:
                 arcpy.CopyFeatures_management(points, result_ds_name)
+                messages.addMessage("Result dataset '{}' created".format(result_ds_name))
             except Exception as e:
                 messages.addErrorMessage("Error creating result dataset '{}' : {}".format(result_ds_name, e))
                 messages.addMessage("*** Export the selection in layer '{}' to save the results".format(points))
 
-            messages.addMessage("Result dataset '{}' created".format(result_ds_name))
-
         return
 
-
-def get_well_known_id_field(dataset):
-
-    fields = [f.name for f in arcpy.ListFields(dataset)]
-
-    x_fields = tuple(
-        set(fields).intersection(["OBJECTID", "OID", "FID"]))
-
-    if not x_fields:
-        raise ValueError("Could not find a well-known ID field in dataset")
-
-    id_field = tuple(x_fields)[0]
-
-    return id_field
