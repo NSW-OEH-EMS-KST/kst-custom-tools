@@ -85,8 +85,7 @@ class ContainedNearestCentroidTool(object):
         tmp_poly_lyr = "tmp_poly_lyr"
 
         poly_rows = [row for row in arcpy.da.UpdateCursor(polygons, ['SHAPE@XY', 'OID@'])]
-        # poly_rows = ]
-        total_rows = len(poly_search_cursor)
+        total_rows = len(poly_rows)
         row_num = 0
         results = {}
 
