@@ -88,6 +88,8 @@ class PercentilesTool(object):
         # messages.addMessage("Intervals = '{}' -->> quantiles =  '{}".format(num_intervals, num_quantiles))
 
         arr = arcpy.da.FeatureClassToNumPyArray(in_layer, in_fieldname)
+        arr = arr.astype(numpy.float32)
+        messages.addMessage(arr)
 
         v = []
         for i in range(1, 99):
