@@ -1,3 +1,11 @@
+import py_compile
+
+ts = ["kst-custom-tools.pyt", "contained_nearest_centroid.py", "pseudo_absence.py", "percentiles.py", "run_maxent.py", "single_feature_kml.py", "sum_cost_distances.py"]
+
+for t in ts:
+    py_compile.compile(t)
+    print "compiled {}".format(t)
+
 from contained_nearest_centroid import ContainedNearestCentroidTool
 from sum_cost_distances import SumCostDistancesTool
 from run_maxent import MaxentModellingTool
@@ -10,9 +18,17 @@ class Toolbox(object):
 
     def __init__(self):
 
-        self.label = "KST Custom Tools"
-        self.alias = "kst_custom_toolbox"
         self.tools = [ContainedNearestCentroidTool, SumCostDistancesTool, MaxentModellingTool, SingleFeatureKmlTool, PercentilesTool, PseudoAbsenceGenerator]
 
         return
+
+
+tb = Toolbox()
+for t in tb.tools:
+    try:
+        tool = t()
+        print "Executing {}".format(tool.label)
+        tool.execute(tool.getParameterInfo(), None)
+    except Exception as e:
+        print e
 

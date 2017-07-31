@@ -522,7 +522,7 @@ def get_parameter_by_name(parameters, parameter_name):
         if param.name == parameter_name:
             return param
 
-    raise ValueError("Parameter '{}' not found".format(p))
+    raise ValueError("Parameter '{}' not found".format(parameter_name))
 
 
 def set_parameter_by_name(parameters, parameter_name, value):
