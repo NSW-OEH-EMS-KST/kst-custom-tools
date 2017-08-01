@@ -5,6 +5,10 @@ from datetime import datetime
 from collections import OrderedDict
 from random import random
 from math import sqrt, pi, cos, sin
+import logging
+import logging.handlers
+
+MAX_ITS = 100000
 
 
 class PseudoAbsenceGenerator(object):
@@ -91,49 +95,64 @@ class PseudoAbsenceGenerator(object):
             direction="Input")
 
         param9 = arcpy.Parameter(
-            displayName="Output Layer",
+            displayName="Maximum Iterations",
+            name="max_its",
+            datatype="GPLong",
+            parameterType="Required",
+            direction="Input")
+
+        param9.value = MAX_ITS
+
+        param10 = arcpy.Parameter(
+            displayName="Pseudo Points",
             name="out_pt_lyr",
             datatype="GPLayer",
             parameterType="Derived",
             direction="Output")
 
-        return [param0, param1, param2, param3, param4, param5, param6, param7, param8, param9]
+        param11 = arcpy.Parameter(
+            displayName="Study Points",
+            name="out_study_pts",
+            datatype="GPLayer",
+            parameterType="Derived",
+            direction="Output")
 
-    def isLicensed(self):
+        return [param0, param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11]
 
-        return True
-
-    def updateParameters(self, parameters):
-
-        return
-
-    def updateMessages(self, parameters):
-
-        return
+    # def isLicensed(self):
+    #
+    #     return True
+    #
+    # def updateParameters(self, parameters):
+    #
+    #     return
+    #
+    # def updateMessages(self, parameters):
+    #
+    #     return
 
     def execute(self, parameters, messages):
 
         add_message = messages.addMessage
+        logger = init_log(add_message)
 
-        parameter_dictionary = OrderedDict([(p.DisplayName, p.valueAsText) for p in parameters[:-1]])
-        parameter_summary = ", ".join(["{}: {}".format(k, v) for k, v in parameter_dictionary.iteritems()])
-        add_message("Parameter summary: {}".format(parameter_summary))
+        parameter_dictionary = OrderedDict([(p.DisplayName, p.valueAsText) for p in parameters[:-2]])
+        add_message("Parameter summary:")
+        [add_message("{}: {}".format(k, v)) for k, v in parameter_dictionary.iteritems()]
+
+        add_message(parameter_dictionary.values())
 
         in_sample_points, in_points_id_field, in_offset_max, in_offset_min, \
         in_study_layer, in_proximity_layer, in_proximity_min, \
-        in_out_ws, in_out_lyr = parameter_dictionary.values()
+        in_out_ws, in_out_lyr, max_its = parameter_dictionary.values()
+
+        global MAX_ITS
+        MAX_ITS = float(max_its)
 
         # cast inputs to float
         in_offset_max = float(in_offset_max) if in_offset_max not in [None, "#"] else 0
         in_offset_min = float(in_offset_min) if in_offset_min not in [None, "#"] else 0
         in_proximity_min = float(in_proximity_min) if in_proximity_min not in [None, "#"] else 0
-        # for i in [in_offset_max, in_offset_min, in_proximity_min]:
-        #     i = float(i) if i not in [None, "#"] else None
-        #     add_message(i)
-        add_message("{} {} {}".format(in_offset_min, in_offset_max, in_proximity_min))
-        add_message("{} {} {}".format(type(in_offset_min), type(in_offset_max), type(in_proximity_min)))
-        total_points = int(arcpy.GetCount_management(in_sample_points).getOutput(0))
-        add_message("Points layer contains {} features".format(total_points))
 
         # delete existing data
         out_name = os.path.join(in_out_ws, in_out_lyr)
@@ -145,7 +164,8 @@ class PseudoAbsenceGenerator(object):
         spat_ref = arcpy.Describe(in_sample_points).SpatialReference
         arcpy.CreateFeatureclass_management(in_out_ws, in_out_lyr, "POINT", spatial_reference=spat_ref)
         arcpy.AddField_management(out_name, "parent_id", "TEXT", field_length=255)
-        arcpy.AddField_management(out_name, "xy", "TEXT", field_length=255)
+        arcpy.AddField_management(out_name, "xy_orig", "TEXT", field_length=255)
+        arcpy.AddField_management(out_name, "xy_pseudo", "TEXT", field_length=255)
         arcpy.AddField_management(out_name, "iterations", "TEXT", field_length=255)
         arcpy.AddField_management(out_name, "duration", "TEXT", field_length=255)
         arcpy.AddField_management(out_name, "status", "TEXT", field_length=255)
@@ -163,8 +183,11 @@ class PseudoAbsenceGenerator(object):
             add_message("Study layer contains {} feature(s)".format(total_feats, in_study_layer))
 
             arcpy.SelectLayerByLocation_management("points_layer", "WITHIN", "study_layer")  #, {search_distance}, {selection_type}, {invert_spatial_relationship})
-            study_points = int(arcpy.GetCount_management("points_layer").getOutput(0))
-            add_message("Points layer contains {} features within study area '{}'".format(study_points, in_study_layer))
+            study_points = os.path.join(in_out_ws, in_out_lyr + "_study_points")
+            arcpy.CopyFeatures_management("points_layer", study_points)
+
+            study_point_count = int(arcpy.GetCount_management("points_layer").getOutput(0))
+            add_message("Points layer contains {} features within study area '{}'".format(study_point_count, in_study_layer))
             study_feats = [f[0] for f in arcpy.da.SearchCursor("study_layer", ["SHAPE@"])]
         else:
             study_feats = []
@@ -186,72 +209,99 @@ class PseudoAbsenceGenerator(object):
 
         add_message("proximity features: {}".format(proximity_feats))
 
+        add_message("Generating pseudo-points...")
+
         # get the points in a cursor
-        point_rows = arcpy.da.SearchCursor("points_layer", ['SHAPE@XY', in_points_id_field])
+        point_rows = arcpy.da.SearchCursor("points_layer", ['SHAPE@', in_points_id_field])
 
         result = []
         row_num = 0
         for point_row in point_rows:
 
-            x0, y0 = point_row[0]
+            point = point_row[0].centroid
             point_id = point_row[1]
-
             row_num += 1
 
-            x = [point_id]
-            x.extend(generate_pseudo_point(x0, y0, in_offset_max, in_offset_min, study_feats, proximity_feats, in_proximity_min, add_message))
-            add_message("Pseudo-random point {}: {} : took {} iterations, {} seconds".format(*x))  # id, xy, n, t, xy
+            x = [point_id]  # , "x={} y={}".format(point.X, point.Y)]
+            x.extend(generate_pseudo_point(point, in_offset_max, in_offset_min, study_feats, proximity_feats, in_proximity_min, logger.debug))
+            add_message("Pseudo-random point {} : old ({})  new ({}) : took {} iterations, {} seconds : ".format(*x))  # id, xy, n, t, s, xy
             result.append(x)
 
-        with arcpy.da.InsertCursor(out_name, ["parent_id", "xy", "iterations", "duration", "SHAPE@XY"]) as ICur:
+        with arcpy.da.InsertCursor(out_name, ["parent_id", "xy_orig", "xy_pseudo", "iterations", "duration", "status", "SHAPE@XY"]) as ICur:
             for v in result:
+                add_message(v)
                 ICur.insertRow(v)  # insert it into the feature class
 
-        arcpy.SetParameterAsText(9, out_name)
+        arcpy.SetParameterAsText(10, out_name)
+        arcpy.SetParameterAsText(11, study_points if in_study_layer else in_sample_points)
 
         return
 
 
-def generate_pseudo_point(x0, y0, max_offset, min_offset=0, study_features=[], proximity_features=[], min_proximity_offset=0, print_func=print):
+def generate_pseudo_point(point, max_offset, min_offset=0, study_features=[], proximity_features=[], min_proximity_offset=0, print_func=print):
 
-    n, max_it = 0, 10000
+    # print_func(locals())
+
+    n, unsolved = 0, True
     start = datetime.now()
-    while True:
-        n += 1
 
-        if n > max_it:
-            return "-9999, -9999", 0, 0, "max iterations reached {}".format(max_it), "-9999, -9999"
+    xy = "{}, {}".format(point.X, point.Y)
+
+    while unsolved:
+        if n > MAX_ITS:
+            return xy, "{}, {}".format(-9999, -9999), n-1, str(datetime.now() - start), "max iterations reached {}".format(MAX_ITS), (-9999, -9999)
+
+        n += 1
 
         u = random()
         v = random()
 
         w = max_offset * sqrt(u)
         t = 2.0 * pi * v
-        x = x0 + w * cos(t)
-        y = y0 + w * sin(t)
+        x = point.X + w * cos(t)
+        y = point.Y + w * sin(t)
 
         if min_offset:
-            if sqrt((x - x0)**2 + (y - y0)**2) < min_offset:
+            if sqrt((x - point.X)**2 + (y - point.Y)**2) < min_offset:
                 print_func("too close to original")
+                # REJECTED
                 continue
+
+        point.X, point.Y = x, y  # RE-USING POINT OBJECT ********************
 
         # is point within study area
-        p = arcpy.Point()
-        p.X, p.Y = x, y
         if study_features:
-            if True not in [p.within(f) for f in study_features]:
-                print_func("not within study feature")
-                # if True not in list(map(p.within, study_features)):
-                continue
+            for s in study_features:  # is point within study area
+                if not point.within(s):
+                    # REJECTED
+                    continue
 
-        # is point too close to proximity layer
-        if proximity_features:
-            if min([p.distanceTo(f) for f in study_features]) < min_proximity_offset:
-                print_func("too close to proximity feature")
-                # if min(map(p.distanceTo, proximity_features)) < min_proximity_offset:
-                continue
+        # is point too close to proximity features
+        if proximity_features and min_proximity_offset:  # is point too close to proximity layer
+            for p in proximity_features:
+                if point.distanceTo(p) < min_proximity_offset:
+                    print_func("too close to proximity feature")
+                    # REJECTED
+                    continue
 
-        # if we got here, we are good
-        t = datetime.now() - start
-        xy = "{}, {}".format(x, y)
-        return xy, n, t, "ok", xy
+        unsolved = False
+
+    return xy, "{}, {}".format(point.X, point.Y), n, str(datetime.now() - start), "solved", (point.X, point.Y)  # xy
+
+
+def init_log(print_func=print):
+
+    log_filename = 'pseudo-absences.log'
+
+    logger = logging.getLogger('pseudo-absence')
+    logger.setLevel(logging.DEBUG)
+
+    handler = logging.handlers.RotatingFileHandler(log_filename, maxBytes=2000000, backupCount=5)
+
+    logger.addHandler(handler)
+
+    filename = handler.baseFilename
+
+    print_func("Logging file at {}".format(filename))
+
+    return logger
