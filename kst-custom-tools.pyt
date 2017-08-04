@@ -3,7 +3,7 @@ from sum_cost_distances import SumCostDistancesTool
 from run_maxent import MaxentModellingTool
 from single_feature_kml import SingleFeatureKmlTool
 from percentiles import PercentilesTool
-from pseudo_absence import PseudoAbsenceGenerator
+from pseudo_absence import PseudoRandomPointGenerator
 
 
 class Toolbox(object):
@@ -12,7 +12,7 @@ class Toolbox(object):
 
         self.label = "KST Custom Tools"
         self.alias = "kst_custom_toolbox"
-        self.tools = [ContainedNearestCentroidTool, SumCostDistancesTool, MaxentModellingTool, SingleFeatureKmlTool, PercentilesTool, PseudoAbsenceGenerator]
+        self.tools = [ContainedNearestCentroidTool, SumCostDistancesTool, MaxentModellingTool, SingleFeatureKmlTool, PercentilesTool, PseudoRandomPointGenerator]
 
         return
 
