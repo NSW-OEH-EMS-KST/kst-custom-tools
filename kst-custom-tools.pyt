@@ -3,7 +3,7 @@ from sum_cost_distances import SumCostDistancesTool
 from run_maxent import MaxentModellingTool
 from single_feature_kml import SingleFeatureKmlTool
 from percentiles import PercentilesTool
-from pseudo_absence import PseudoRandomPointGenerator
+from pseudo_point import PseudoRandomPointGenerator
 
 
 class Toolbox(object):

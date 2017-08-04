@@ -1,6 +1,6 @@
 import py_compile
 
-ts = ["kst-custom-tools.pyt", "contained_nearest_centroid.py", "pseudo_absence.py", "percentiles.py", "run_maxent.py", "single_feature_kml.py", "sum_cost_distances.py"]
+ts = ["kst-custom-tools.pyt", "contained_nearest_centroid.py", "pseudo_point.py", "percentiles.py", "run_maxent.py", "single_feature_kml.py", "sum_cost_distances.py"]
 
 for t in ts:
     py_compile.compile(t)
@@ -11,7 +11,7 @@ from sum_cost_distances import SumCostDistancesTool
 from run_maxent import MaxentModellingTool
 from single_feature_kml import SingleFeatureKmlTool
 from percentiles import PercentilesTool
-from pseudo_absence import PseudoRandomPointGenerator
+from pseudo_point import PseudoRandomPointGenerator
 
 
 class Toolbox(object):
