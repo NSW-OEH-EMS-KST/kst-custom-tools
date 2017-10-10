@@ -7,7 +7,7 @@ class SingleFeatureKmlTool(object):
     def __init__(self):
 
         self.label = "Single feature KML"
-        self.description = "Exports features singly into files"
+        self.description = "Exports features into individual KML files"
         self.canRunInBackground = False
 
         return

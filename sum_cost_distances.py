@@ -5,12 +5,12 @@ import numpy
 from collections import OrderedDict
 
 
-class SumCostDistancesTool(object):
+class SumWeightedCostDistancesTool(object):
 
     def __init__(self):
 
-        self.label = "Sum Cost Distances"
-        self.description = "Sums cost distances calculated on unique input feature field values"
+        self.label = "Sum Weighted Cost Distances"
+        self.description = "Sums weighted cost distances calculated on unique input feature field values"
         self.canRunInBackground = False
 
         return
@@ -25,7 +25,7 @@ class SumCostDistancesTool(object):
             direction="Input")
 
         param1 = arcpy.Parameter(
-            displayName="Field of Interest",
+            displayName="Field for Weight Factor",
             name="in_features_field",
             datatype="Field",
             parameterType="Required",
@@ -125,8 +125,6 @@ class SumCostDistancesTool(object):
                 raise ValueError("Could not pull in Numpy array")
 
         unique_values = numpy.unique(data[in_fieldname])
-
-        # unique_values = sorted({row[0] for row in arcpy.da.SearchCursor(in_layer, in_fieldname)})  # if row[0]})
         unique_values_count = len(unique_values)
         messages.addMessage("The input dataset field '{}' has {} unique values: {}".format(in_fieldname, unique_values_count, unique_values))
 

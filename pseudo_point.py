@@ -13,12 +13,12 @@ POINTS = []
 FAIL_COUNT = 0
 
 
-class PseudoRandomPointGenerator(object):
+class PseudoRandomAbsenceGenerator(object):
 
     def __init__(self):
 
-        self.label = "Pseudo-random Point Generator"
-        self.description = "Generate a pseudo-random point layer"
+        self.label = "Pseudo-random Absence Generator"
+        self.description = "Generate a pseudo-random absence point layer"
         self.canRunInBackground = False
 
         return
